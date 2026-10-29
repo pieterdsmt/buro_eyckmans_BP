@@ -38,12 +38,11 @@
   .status-pill.klaar { background:#175c36; }
 
   /* VERDIEPING TABS */
-    .type-switch { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-    .type-switch button {
-      min-height:44px; border:1.5px solid #d0d0d0; border-radius:10px;
-      background:white; color:var(--donker); font:inherit; font-weight:700; cursor:pointer;
-    }
-    .type-switch button[aria-pressed="true"] { background:var(--donker); color:white; border-color:var(--donker); }
+    .groep-select { width:100%; min-height:44px; margin:8px 0 12px; padding:10px; font:inherit; border:1.5px solid #d0d0d0; border-radius:10px; background:white; color:var(--donker); }
+    .structuur-rij { padding:8px 0; border-bottom:1px solid #eee; }
+    .structuur-rij select { margin:5px 0 0; }
+    .structuur-groep { margin-top:12px; font-size:0.9rem; }
+    .structuur-tip { margin-top:10px; font-size:0.82rem; line-height:1.5; color:#555; }
 
     /* VERDIEPING TABS */
   .verd-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
@@ -167,31 +166,26 @@
   <div class="status-pill" id="netStatus">● Online</div>
 </header>
 
-<div class="sectie">
-  <div class="sectie-header"><h2>Type plaatsbeschrijving</h2></div>
-  <div class="sectie-body">
-    <div class="type-switch" role="group" aria-label="Type plaatsbeschrijving">
-      <button id="typeVerhuur" type="button" aria-pressed="true" onclick="kiesType('verhuur')">Verhuur</button>
-      <button id="typeConstructie" type="button" aria-pressed="false" onclick="kiesType('constructie')">Constructie</button>
-    </div>
-  </div>
-</div>
-
 <!-- VERDIEPING -->
 <div class="sectie" id="verdiepingSectie">
-  <div class="sectie-header"><h2>🏢 Verdieping</h2></div>
+  <div class="sectie-header"><h2>🏢 Groepering (optioneel)</h2></div>
   <div class="sectie-body">
-    <div class="verd-tabs" id="verdTabs">
-      <button class="verd-tab actief" data-naam="Gelijkvloers" onclick="kiesVerdieping(this,'Gelijkvloers')">Gelijkvloers</button>
-      <button class="verd-tab" data-naam="Eerste verdieping" onclick="kiesVerdieping(this,'Eerste verdieping')">1e verdieping</button>
-      <button class="verd-tab" data-naam="Tweede verdieping" onclick="kiesVerdieping(this,'Tweede verdieping')">2e verdieping</button>
-      <button class="verd-tab" data-naam="Zolder" onclick="kiesVerdieping(this,'Zolder')">Zolder</button>
-      <button class="verd-tab" data-naam="Kelder" onclick="kiesVerdieping(this,'Kelder')">Kelder</button>
-    </div>
+    <p class="structuur-tip">Voeg alleen de ruimtes toe die u wilt beschrijven. Het verslagtype kiest u later in de pc-app.</p>
+    <label for="groepKeuze">Toevoegen onder</label>
+    <select id="groepKeuze" class="groep-select" onchange="kiesGroep(this.value)">
+      <option value="">Geen groep — rechtstreeks in het verslag</option>
+      <option>Gelijkvloers</option>
+      <option>Eerste verdieping</option>
+      <option>Tweede verdieping</option>
+      <option>Zolder</option>
+      <option>Kelder</option>
+      <option>Openbaar domein</option>
+    </select>
     <div class="verd-eigen">
-      <input type="text" id="eigenVerd" placeholder="Andere verdieping (bv. Derde verdieping)">
+      <input type="text" id="eigenVerd" placeholder="Nieuwe groep (bv. Appartement 2, Bijgebouw)">
       <button onclick="voegVerdiepingToe()">+ Toevoegen</button>
     </div>
+    <p class="structuur-tip">Voor een appartement is een verdieping niet nodig. Kies alleen een groep als u ruimtes wilt bundelen. Een groep kiezen voegt nog geen tekst toe.</p>
   </div>
 </div>
 
@@ -235,11 +229,22 @@
       <button class="kamer-btn" onclick="voegKamerToe('Terras')">☀️ Terras</button>
       <button class="kamer-btn" onclick="voegKamerToe('Gang')">🚶 Gang</button>
     </div>
+    <div class="kamer-grid" id="openbaarKeuzes" hidden>
+      <button class="kamer-btn" onclick="voegKamerToe('Voetpad')">Voetpad</button>
+      <button class="kamer-btn" onclick="voegKamerToe('Boordsteen')">Boordsteen</button>
+      <button class="kamer-btn" onclick="voegKamerToe('Goot')">Goot</button>
+      <button class="kamer-btn" onclick="voegKamerToe('Rijweg')">Rijweg</button>
+    </div>
     <div class="kamer-eigen">
       <input type="text" id="eigenKamer" placeholder="Eigen kamer (bv. Wasplaats, Bureau...)">
       <button onclick="voegEigenKamerToe()">+ Toevoegen</button>
     </div>
   </div>
+</div>
+
+<div class="sectie">
+  <div class="sectie-header"><h2>Structuur van het verslag</h2></div>
+  <div class="sectie-body" id="structuurOverzicht" aria-live="polite"></div>
 </div>
 
 <!-- EXTRA ZAKEN -->
@@ -299,84 +304,70 @@ const LEGACY_STORAGE_KEY = "pb_tekst";
 let herkenning = null;
 let bezig = false;
 let volledig = "";
-let verslagType = "verhuur";
-let huidigeVerdieping = "Gelijkvloers";
+let huidigeVerdieping = "";
 let eigenVerdiepingen = [];
 
-function toonType(soort) {
-  verslagType = soort === "constructie" ? "constructie" : "verhuur";
-  const constructie = verslagType === "constructie";
-  document.getElementById("typeVerhuur").setAttribute("aria-pressed", String(!constructie));
-  document.getElementById("typeConstructie").setAttribute("aria-pressed", String(constructie));
-  document.getElementById("verdiepingSectie").hidden = constructie;
-  document.getElementById("kamerKeuzes").hidden = constructie;
-  document.getElementById("locatieTitel").textContent = constructie ? "📍 Locatie of onderdeel toevoegen" : "🏠 Kamer toevoegen";
-  document.getElementById("eigenKamer").placeholder = constructie
-    ? "Locatie of onderdeel (bv. Gevel noord, Trottoir, Muur keuken...)"
+function toonPlaatsing() {
+  const openbaar = huidigeVerdieping === "Openbaar domein";
+  document.getElementById("kamerKeuzes").hidden = false;
+  document.getElementById("openbaarKeuzes").hidden = !openbaar;
+  document.getElementById("groepKeuze").value = huidigeVerdieping;
+  document.getElementById("locatieTitel").textContent = openbaar
+    ? "Openbaar domein — onderdeel toevoegen"
+    : "🏠 Kamer toevoegen";
+  document.getElementById("eigenKamer").placeholder = openbaar
+    ? "Eigen onderdeel (bv. Fietspad, Parkeerstrook...)"
     : "Eigen kamer (bv. Wasplaats, Bureau...)";
 }
 
-function kiesType(soort) {
-  toonType(soort);
+function kiesGroep(naam) {
+  huidigeVerdieping = naam;
+  toonPlaatsing();
   bewaarStatus();
 }
 
 // ── VERDIEPING ──────────────────────────────────────────────
-function kiesVerdieping(el, naam) {
-  document.querySelectorAll(".verd-tab").forEach(t => t.classList.remove("actief"));
-  el.classList.add("actief");
-  huidigeVerdieping = naam;
-  bewaarStatus();
-  toonToast("📍 " + naam + " geselecteerd");
-}
-
 function voegVerdiepingKnopToe(naam, selecteer = false) {
-  const tabs = document.getElementById("verdTabs");
-  const bestaat = Array.from(tabs.querySelectorAll(".verd-tab")).some(btn => btn.dataset.naam === naam);
+  const tabs = document.getElementById("groepKeuze");
+  const bestaat = Array.from(tabs.options).some(opt => opt.value.toLowerCase() === naam.toLowerCase());
   if (bestaat) return null;
 
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "verd-tab";
+  const btn = document.createElement("option");
   btn.textContent = naam;
-  btn.dataset.naam = naam;
+  btn.value = naam;
   btn.dataset.eigen = "true";
-  btn.onclick = function() { kiesVerdieping(this, naam); };
   tabs.appendChild(btn);
-  if (selecteer) kiesVerdieping(btn, naam);
+  if (selecteer) kiesGroep(naam);
   return btn;
 }
 
 function voegVerdiepingToe() {
   const inp = document.getElementById("eigenVerd");
   const naam = inp.value.trim();
-  if (!naam) { toonToast("Typ eerst een verdieping in"); return; }
+  if (!naam || /[\r\n[\]]/.test(naam)) { toonToast("Typ een groepsnaam zonder vierkante haken in"); return; }
 
   const btn = voegVerdiepingKnopToe(naam, false);
-  if (!btn) { toonToast("Deze verdieping bestaat al"); return; }
+  if (!btn) { toonToast("Deze groep bestaat al"); return; }
 
   eigenVerdiepingen.push(naam);
-  volledig += "\n\n========== " + naam.toUpperCase() + " ==========\n";
-  document.getElementById("tekst").value = volledig;
-  updateTeller();
-  kiesVerdieping(btn, naam);
+  kiesGroep(naam);
+  toonStructuur();
   inp.value = "";
   toonToast("✅ " + naam + " toegevoegd");
 }
 
 function selecteerVerdiepingOpNaam(naam) {
-  const btn = Array.from(document.querySelectorAll(".verd-tab")).find(el => el.dataset.naam === naam);
+  const btn = Array.from(document.getElementById("groepKeuze").options).find(el => el.value === naam);
   if (!btn) return false;
-  document.querySelectorAll(".verd-tab").forEach(t => t.classList.remove("actief"));
-  btn.classList.add("actief");
   huidigeVerdieping = naam;
+  toonPlaatsing();
   return true;
 }
 
 // ── KAMER ───────────────────────────────────────────────────
 function voegKamerToe(naam) {
-  const label = verslagType === "verhuur" ? naam.toUpperCase() + " [" + huidigeVerdieping + "]" : naam.toUpperCase();
-  volledig += "\n\n--- " + label + " ---\n";
+  if (/[\r\n[\]]/.test(naam)) { toonToast("Gebruik een ruimtenaam zonder vierkante haken"); return; }
+  volledig += "\n\n--- " + naam.toUpperCase() + " [" + huidigeVerdieping + "] ---\n";
   const ta = document.getElementById("tekst");
   ta.value = volledig;
   updateTeller();
@@ -465,10 +456,79 @@ function stopMic() {
 }
 
 // ── OPSLAG & TELLER ─────────────────────────────────────────
+function leesRuimtes() {
+  const ruimtes = [];
+  let groep = "";
+  const regels = volledig.split("\n");
+  regels.forEach((regel, index) => {
+    const kop = regel.trim().match(/^=+\s*(.+?)\s*=+$/);
+    if (kop) { groep = kop[1]; return; }
+    const marker = regel.trim().match(/^-{3,}\s*(.+?)\s*-{3,}$/);
+    if (!marker) return;
+    const suffix = marker[1].match(/^(.*?)\s*\[([^\]]*)\]\s*$/);
+    ruimtes.push({
+      regel: index,
+      naam: suffix ? suffix[1].trim() : marker[1],
+      groep: suffix ? suffix[2].trim() : groep
+    });
+  });
+  return ruimtes;
+}
+
+function toonStructuur() {
+  const overzicht = document.getElementById("structuurOverzicht");
+  overzicht.replaceChildren();
+  const ruimtes = leesRuimtes();
+  if (!ruimtes.length) {
+    overzicht.textContent = "Nog geen ruimtes toegevoegd. Begin met een ruimte; groeperen kan altijd later.";
+    return;
+  }
+  const groepen = new Map();
+  ruimtes.forEach(ruimte => {
+    if (!groepen.has(ruimte.groep)) groepen.set(ruimte.groep, []);
+    groepen.get(ruimte.groep).push(ruimte);
+  });
+  const opties = [...new Set([
+    ...Array.from(document.getElementById("groepKeuze").options, opt => opt.value),
+    ...groepen.keys()
+  ])];
+  groepen.forEach((items, groep) => {
+    const titel = document.createElement("h3");
+    titel.className = "structuur-groep";
+    titel.textContent = groep || "Rechtstreeks in het verslag";
+    overzicht.appendChild(titel);
+    items.forEach(ruimte => {
+      const rij = document.createElement("div");
+      rij.className = "structuur-rij";
+      const naam = document.createElement("span");
+      naam.textContent = ruimte.naam;
+      const keuze = document.createElement("select");
+      keuze.className = "groep-select";
+      keuze.setAttribute("aria-label", "Groep voor " + ruimte.naam);
+      opties.forEach(groepsnaam => {
+        const optie = document.createElement("option");
+        optie.value = groepsnaam;
+        optie.textContent = groepsnaam || "Geen groep";
+        keuze.appendChild(optie);
+      });
+      keuze.value = ruimte.groep;
+      keuze.onchange = () => {
+        const regels = document.getElementById("tekst").value.split("\n");
+        regels[ruimte.regel] = "--- " + ruimte.naam + " [" + keuze.value + "] ---";
+        document.getElementById("tekst").value = regels.join("\n");
+        updateTeller();
+        toonToast("Groep aangepast — beschrijving behouden");
+      };
+      rij.append(naam, keuze);
+      overzicht.appendChild(rij);
+    });
+  });
+}
+
 function bewaarStatus() {
   const status = {
     tekst: volledig,
-    verslagType,
+    structuurVersie: 3,
     huidigeVerdieping,
     eigenVerdiepingen,
     bijgewerkt: new Date().toISOString()
@@ -482,6 +542,7 @@ function updateTeller() {
   document.getElementById("teller").textContent = v.length;
   volledig = v;
   bewaarStatus();
+  toonStructuur();
 }
 
 function herstelStatus() {
@@ -494,19 +555,26 @@ function herstelStatus() {
   }
 
   if (status && typeof status === "object") {
-    toonType(status.verslagType);
-    eigenVerdiepingen = Array.isArray(status.eigenVerdiepingen) ? status.eigenVerdiepingen : [];
+    eigenVerdiepingen = Array.isArray(status.eigenVerdiepingen)
+      ? status.eigenVerdiepingen.filter(naam => typeof naam === "string" && naam.trim())
+      : [];
     eigenVerdiepingen.forEach(naam => voegVerdiepingKnopToe(naam, false));
-    huidigeVerdieping = status.huidigeVerdieping || "Gelijkvloers";
-    if (!selecteerVerdiepingOpNaam(huidigeVerdieping)) selecteerVerdiepingOpNaam("Gelijkvloers");
+    huidigeVerdieping = typeof status.huidigeVerdieping === "string" ? status.huidigeVerdieping : "";
+    if (status.structuurVersie !== 3 && status.verslagType === "constructie") {
+      huidigeVerdieping = status.constructiePlaatsing === "openbaar" ? "Openbaar domein"
+        : status.constructiePlaatsing === "verdieping" ? huidigeVerdieping : "";
+    }
+    if (!selecteerVerdiepingOpNaam(huidigeVerdieping)) huidigeVerdieping = "";
+    toonPlaatsing();
     volledig = typeof status.tekst === "string" ? status.tekst : "";
   } else {
     volledig = localStorage.getItem(LEGACY_STORAGE_KEY) || "";
-    toonType("verhuur");
+    toonPlaatsing();
   }
 
   document.getElementById("tekst").value = volledig;
   document.getElementById("teller").textContent = volledig.length;
+  toonStructuur();
   if (volledig.length > 5) toonToast("📂 Vorige tekst hersteld");
 }
 
@@ -617,10 +685,11 @@ function wis() {
   if (!confirm("Bent u zeker? Alle tekst en eigen verdiepingen worden gewist.")) return;
   document.getElementById("tekst").value = "";
   volledig = "";
-  huidigeVerdieping = "Gelijkvloers";
+  huidigeVerdieping = "";
   eigenVerdiepingen = [];
-  document.querySelectorAll('.verd-tab[data-eigen="true"]').forEach(el => el.remove());
-  selecteerVerdiepingOpNaam("Gelijkvloers");
+  toonPlaatsing();
+  document.querySelectorAll('#groepKeuze option[data-eigen="true"]').forEach(el => el.remove());
+  selecteerVerdiepingOpNaam("");
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(LEGACY_STORAGE_KEY);
   updateTeller();
@@ -676,5 +745,3 @@ window.addEventListener("load", () => {
 </script>
 </body>
 </html>
-
-

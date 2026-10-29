@@ -1,4 +1,4 @@
-const CACHE_NAME = "pb-opname-v2";
+const CACHE_NAME = "pb-opname-v5";
 const APP_SHELL = [
   "./",
   "./index.html",
